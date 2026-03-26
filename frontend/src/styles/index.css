@@ -1,0 +1,94 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   Global Styles
+   ======================================== */
+
+* {
+  @apply box-border;
+}
+
+html,
+body,
+#root {
+  @apply w-full h-full m-0 p-0;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 font-sans;
+}
+
+/* ========================================
+   Utility Classes
+   ======================================== */
+
+.container-max {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-900 px-4 py-2 rounded-lg font-medium hover:bg-gray-300 transition-colors;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors;
+}
+
+.btn-sm {
+  @apply px-3 py-1 text-sm;
+}
+
+.input-field {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+}
+
+.card-hover {
+  @apply card transition-shadow hover:shadow-md cursor-pointer;
+}
+
+/* ========================================
+   Loading & States
+   ======================================== */
+
+.spinner {
+  @apply w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+
+@media (max-width: 640px) {
+  body {
+    @apply text-sm;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    @apply w-full;
+  }
+}

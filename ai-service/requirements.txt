@@ -1,0 +1,38 @@
+# ========================================
+# InvestWise AI Service - Dependencies
+# ========================================
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+
+# Kafka
+aiokafka==0.10.0
+kafka-python==2.0.2
+
+# HTTP Client (for Ollama)
+httpx==0.27.0
+aiohttp==3.9.5
+
+# Data Validation
+pydantic==2.7.0
+pydantic-settings==2.3.0
+
+# Async Support
+asyncio-mqtt==0.16.2
+
+# JSON handling
+orjson==3.10.0
+
+# Logging
+structlog==24.2.0
+
+# Environment variables
+python-dotenv==1.0.1
+
+# MongoDB (for storing analysis results)
+motor==3.4.0
+pymongo==4.7.0
+
+# Health checks
+prometheus-client==0.20.0

@@ -1,0 +1,11 @@
+Symbol,Name,Quantity,AverageCost,Exchange,Sector
+AAPL,Apple Inc,10,150.00,NASDAQ,Technology
+GOOGL,Alphabet Inc,5,2800.00,NASDAQ,Technology
+MSFT,Microsoft Corporation,8,300.00,NASDAQ,Technology
+AMZN,Amazon.com Inc,3,3300.00,NASDAQ,Consumer Discretionary
+TSLA,Tesla Inc,15,250.00,NASDAQ,Automotive
+INFY,Infosys Limited,25,1500.00,NSE,Technology
+RELIANCE,Reliance Industries,20,2400.00,NSE,Energy
+TCS,Tata Consultancy Services,10,3500.00,NSE,Technology
+HDFC,HDFC Bank Limited,30,1500.00,NSE,Financials
+BAJAJ,Bajaj Auto Limited,5,5000.00,NSE,Automotive

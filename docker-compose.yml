@@ -1,0 +1,286 @@
+# ========================================
+# InvestWise - Docker Compose Configuration
+# ========================================
+# This file defines all the services needed to run InvestWise locally
+#
+# Usage:
+#   Start all services:     docker-compose up -d
+#   View logs:              docker-compose logs -f
+#   Stop all services:      docker-compose down
+#   Stop and remove data:   docker-compose down -v
+# ========================================
+
+services:
+  # ----------------------------------------
+  # MongoDB - Primary Database
+  # ----------------------------------------
+  # Stores users, portfolios, holdings, alerts
+  mongodb:
+    image: mongo:7.0
+    container_name: investwise-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-investwise_admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-investwise_secret_123}
+      MONGO_INITDB_DATABASE: investwise
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ----------------------------------------
+  # Redis - Caching & Rate Limiting
+  # ----------------------------------------
+  # Used for session storage, caching, rate limiting
+  redis:
+    image: redis:7-alpine
+    container_name: investwise-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secret_123}
+    volumes:
+      - redis_data:/data
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secret_123}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------
+  # Zookeeper - Kafka Dependency
+  # ----------------------------------------
+  # Required for Kafka cluster coordination
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: investwise-zookeeper
+    restart: unless-stopped
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------
+  # Kafka - Event Streaming
+  # ----------------------------------------
+  # Handles real-time events: price updates, alerts, etc.
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: investwise-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_NUM_PARTITIONS: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ----------------------------------------
+  # Kafka UI - Web Interface for Kafka
+  # ----------------------------------------
+  # Optional: Useful for debugging Kafka topics
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: investwise-kafka-ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: investwise-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    networks:
+      - investwise-network
+
+  # ----------------------------------------
+  # Ollama - Local LLM Service
+  # ----------------------------------------
+  # Runs local LLM for AI analysis
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: investwise-ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - investwise-network
+  #   # Note: After starting, run: docker exec investwise-ollama ollama pull llama3.1:8b
+  #   # Using port 11435 to avoid conflict with native Ollama on 11434
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         memory: 12G
+
+  # ----------------------------------------
+  # AI Service - Portfolio Analysis
+  # ----------------------------------------
+  # FastAPI service with Kafka consumer for AI analysis
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+      target: production
+    container_name: investwise-ai-service
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      # ollama:
+      #   condition: service_started
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DEBUG: "false"
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_GROUP_ID: ai-analysis-group
+      KAFKA_TOPIC_ANALYSIS_REQUESTS: portfolio.analysis.requests
+      KAFKA_TOPIC_ANALYSIS_RESULTS: portfolio.analysis.results
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: llama3.1:8b
+      OLLAMA_TIMEOUT: 120
+      SERPER_API_KEY: 95c10436304622fd09aaf7d2a4263f3eeac56a6b
+      ENABLE_RESEARCH_AGENT: ${ENABLE_RESEARCH_AGENT:-false}
+      AGENT_MAX_ITERATIONS: 10
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-investwise_admin}:${MONGO_ROOT_PASSWORD:-investwise_secret_123}@mongodb:27017/investwise?authSource=admin
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ----------------------------------------
+  # Backend API Service
+  # ----------------------------------------
+  # Main Express.js backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: production
+    container_name: investwise-backend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-investwise_admin}:${MONGO_ROOT_PASSWORD:-investwise_secret_123}@mongodb:27017/investwise?authSource=admin
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret_123}
+      KAFKA_BROKERS: kafka:29092
+      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_change_in_production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-your_super_secret_refresh_key_change_in_production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-32_character_encryption_key_here!}
+    networks:
+      - investwise-network
+
+  # ----------------------------------------
+  # Frontend React Application
+  # ----------------------------------------
+  # React UI served on port 5173
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: investwise-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: production
+    networks:
+      - investwise-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5173/', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+# ----------------------------------------
+# Networks
+# ----------------------------------------
+networks:
+  investwise-network:
+    driver: bridge
+    name: investwise-network
+
+# ----------------------------------------
+# Volumes - Persistent Data Storage
+# ----------------------------------------
+volumes:
+  mongodb_data:
+    name: investwise-mongodb-data
+  redis_data:
+    name: investwise-redis-data
+  zookeeper_data:
+    name: investwise-zookeeper-data
+  zookeeper_logs:
+    name: investwise-zookeeper-logs
+  kafka_data:
+    name: investwise-kafka-data
+  ollama_data:
+    name: investwise-ollama-data
