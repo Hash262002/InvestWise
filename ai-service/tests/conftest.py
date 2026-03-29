@@ -190,7 +190,7 @@ def mock_settings():
     settings.kafka_request_topic = "portfolio-analysis-requests"
     settings.kafka_result_topic = "portfolio-analysis-results"
     settings.ollama_base_url = "http://localhost:11434"
-    settings.ollama_model = "llama3.2"
+    settings.ollama_model = "llama3.1:8b"
     settings.ollama_timeout = 60
     settings.redis_url = "redis://localhost:6379"
     

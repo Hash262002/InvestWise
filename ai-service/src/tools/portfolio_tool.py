@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 import logging
 
-from .base_tool import BaseTool
+from .base_tool import BaseTool, ToolResult, ToolResultStatus
 
 logger = logging.getLogger(__name__)
 
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class PortfolioAnalysisTool(BaseTool):
     """Tool for portfolio data extraction and analysis helpers"""
     
-    name = "portfolio_analyzer"
+    name = "portfolio_reader"
     description = """Portfolio data extraction tool. Extracts specific information from portfolio data.
     
     Operations:
@@ -23,6 +23,14 @@ class PortfolioAnalysisTool(BaseTool):
     - operation: The operation to perform
     - portfolio: The portfolio data dictionary
     """
+    
+    def __init__(self, portfolio_data: Dict = None):
+        """Initialize with optional portfolio data"""
+        self.portfolio_data = portfolio_data
+    
+    def set_portfolio_data(self, data: Dict[str, Any]):
+        """Update portfolio data for analysis"""
+        self.portfolio_data = data
     
     def _get_parameters_schema(self) -> Dict[str, Any]:
         return {
@@ -67,43 +75,49 @@ class PortfolioAnalysisTool(BaseTool):
         operation: str = None, 
         portfolio: Dict = None, 
         top_n: int = 5,
+        limit: int = 5,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> ToolResult:
         """Execute portfolio analysis operation"""
         
         if not operation or not portfolio:
-            return {
-                "error": True,
-                "message": f"Missing required parameters. Got operation={operation}, portfolio={'provided' if portfolio else 'missing'}",
-            }
+            return ToolResult(
+                status=ToolResultStatus.ERROR,
+                data=None,
+                error=f"Missing required parameters. Got operation={operation}, portfolio={'provided' if portfolio else 'missing'}"
+            )
         
         operations = {
             "get_holdings_summary": self._get_holdings_summary,
             "get_sector_breakdown": self._get_sector_breakdown,
-            "get_top_holdings": lambda p: self._get_top_holdings(p, top_n),
+            "get_top_holdings": lambda p: self._get_top_holdings(p, limit or top_n),
             "get_asset_type_breakdown": self._get_asset_type_breakdown,
             "identify_risks": self._identify_risks,
         }
         
         if operation not in operations:
-            return {
-                "error": True,
-                "message": f"Unknown operation: {operation}",
-            }
+            return ToolResult(
+                status=ToolResultStatus.ERROR,
+                data=None,
+                error=f"Unknown operation: {operation}"
+            )
         
         try:
             result = operations[operation](portfolio)
-            return {
-                "operation": operation,
-                "result": result,
-                "error": False,
-            }
+            return ToolResult(
+                status=ToolResultStatus.SUCCESS,
+                data={
+                    "operation": operation,
+                    **result
+                }
+            )
         except Exception as e:
             logger.error(f"Portfolio operation error: {e}")
-            return {
-                "error": True,
-                "message": str(e),
-            }
+            return ToolResult(
+                status=ToolResultStatus.ERROR,
+                data=None,
+                error=str(e)
+            )
     
     def _get_holdings_summary(self, portfolio: Dict) -> Dict[str, Any]:
         """Get summary of all holdings"""
@@ -172,7 +186,7 @@ class PortfolioAnalysisTool(BaseTool):
         )
         
         return {
-            "top_holdings": [
+            "holdings": [
                 {
                     "rank": i + 1,
                     "symbol": h.get("symbol"),
@@ -225,9 +239,10 @@ class PortfolioAnalysisTool(BaseTool):
         """Identify potential risks in portfolio"""
         holdings = portfolio.get("holdings", [])
         risks = []
+        concentration_risks = []
         
         if not holdings:
-            return {"risks": ["Portfolio has no holdings"], "risk_count": 1}
+            return {"risks": ["Portfolio has no holdings"], "concentration_risks": [], "risk_count": 1}
         
         total_value = sum(
             h.get("current_value", h.get("currentValue", h.get("total_cost", 0)))
@@ -240,17 +255,21 @@ class PortfolioAnalysisTool(BaseTool):
             weight = (value / total_value * 100) if total_value > 0 else 0
             
             if weight > 30:
-                risks.append({
+                risk_item = {
                     "type": "concentration",
                     "severity": "high",
                     "message": f"{h.get('symbol')} represents {weight:.1f}% of portfolio - high single-stock risk",
-                })
+                }
+                risks.append(risk_item)
+                concentration_risks.append(risk_item)
             elif weight > 20:
-                risks.append({
+                risk_item = {
                     "type": "concentration",
                     "severity": "medium",
                     "message": f"{h.get('symbol')} represents {weight:.1f}% of portfolio - moderate concentration",
-                })
+                }
+                risks.append(risk_item)
+                concentration_risks.append(risk_item)
         
         # Check for sector concentration
         sectors = {}
@@ -285,6 +304,7 @@ class PortfolioAnalysisTool(BaseTool):
         
         return {
             "risks": risks,
+            "concentration_risks": concentration_risks,
             "risk_count": len(risks),
             "high_severity": len([r for r in risks if r.get("severity") == "high"]),
             "medium_severity": len([r for r in risks if r.get("severity") == "medium"]),

@@ -49,7 +49,7 @@ For every calculation, include complete portfolio data in the data parameter.
     
     @property
     def name(self) -> str:
-        return "analyst_agent"
+        return "analyst"
     
     @property
     def description(self) -> str:

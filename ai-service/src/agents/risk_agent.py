@@ -40,7 +40,7 @@ class RiskAgent(BaseAgent):
     
     @property
     def name(self) -> str:
-        return "risk_agent"
+        return "risk_assessor"
     
     @property
     def description(self) -> str:

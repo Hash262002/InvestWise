@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # Ollama LLM Configuration
     ollama_base_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "llama3.2"
+    ollama_model: str = "llama3.1:8b"
     ollama_timeout: int = 120
     
     # Optional: Serper API for web search

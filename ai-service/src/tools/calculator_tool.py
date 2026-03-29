@@ -62,7 +62,7 @@ Example: {"calculation": "portfolio_value", "data": {"holdings": [...]}}"""
             "required": ["calculation", "data"]
         }
     
-    async def execute(
+    def execute(
         self,
         calculation: str = None,
         data: Dict[str, Any] = None,
@@ -95,21 +95,29 @@ Example: {"calculation": "portfolio_value", "data": {"holdings": [...]}}"""
         try:
             if calculation == "portfolio_value":
                 result = self._calc_portfolio_value(data)
+            elif calculation == "portfolio_return":
+                result = self._calc_portfolio_return(data)
+            elif calculation == "holding_return":
+                result = self._calc_holding_return(data)
             elif calculation == "allocation_percentages":
                 result = self._calc_allocation_percentages(data)
+            elif calculation == "allocation_percentage":
+                result = self._calc_allocation_percentage(data)
             elif calculation == "profit_loss":
                 result = self._calc_profit_loss(data)
             elif calculation == "sector_weights":
                 result = self._calc_sector_weights(data)
             elif calculation == "concentration_risk":
                 result = self._calc_concentration_risk(data)
+            elif calculation == "diversification_score":
+                result = self._calc_diversification_score(data)
             elif calculation == "basic_stats":
                 result = self._calc_basic_stats(data)
             else:
                 return ToolResult(
                     status=ToolResultStatus.ERROR,
                     data=None,
-                    error=f"Unknown calculation type: {calculation}. Available: portfolio_value, allocation_percentages, profit_loss, sector_weights, concentration_risk, basic_stats"
+                    error=f"Unknown calculation type: {calculation}. Available: portfolio_value, portfolio_return, holding_return, allocation_percentage, profit_loss, sector_weights, concentration_risk, diversification_score, basic_stats"
                 )
             
             logger.info("calculation_completed", calculation=calculation)
@@ -152,6 +160,108 @@ Example: {"calculation": "portfolio_value", "data": {"holdings": [...]}}"""
             "total_gain_loss": round(total_value - total_cost, 2),
             "total_return_pct": round(((total_value - total_cost) / total_cost * 100) if total_cost > 0 else 0, 2),
             "holdings_count": len(holdings)
+        }
+    
+    def _calc_portfolio_return(self, data: Dict) -> Dict[str, Any]:
+        """Calculate portfolio return percentage"""
+        if "total_invested" not in data or "current_value" not in data:
+            raise ValueError("Missing required fields: total_invested or current_value")
+        
+        total_invested = float(data.get("total_invested", 0))
+        current_value = float(data.get("current_value", 0))
+        
+        if total_invested == 0:
+            return {
+                "return_percentage": 0.0,
+                "return_amount": current_value,
+            }
+        
+        return_amount = current_value - total_invested
+        return_percentage = (return_amount / total_invested) * 100
+        
+        return {
+            "return_percentage": round(return_percentage, 2),
+            "return_amount": round(return_amount, 2),
+            "total_invested": round(total_invested, 2),
+            "current_value": round(current_value, 2),
+        }
+    
+    def _calc_holding_return(self, data: Dict) -> Dict[str, Any]:
+        """Calculate individual holding return"""
+        quantity = float(data.get("quantity", 0))
+        average_cost = float(data.get("average_cost", 0))
+        current_price = float(data.get("current_price", 0))
+        
+        if average_cost == 0:
+            return {
+                "return_percentage": 0.0,
+                "return_amount": 0.0,
+            }
+        
+        return_percentage = ((current_price - average_cost) / average_cost) * 100
+        return_amount = quantity * (current_price - average_cost)
+        
+        return {
+            "return_percentage": round(return_percentage, 2),
+            "return_amount": round(return_amount, 2),
+            "quantity": quantity,
+            "average_cost": round(average_cost, 2),
+            "current_price": round(current_price, 2),
+        }
+    
+    def _calc_allocation_percentage(self, data: Dict) -> Dict[str, Any]:
+        """Calculate allocation percentage for a single holding"""
+        holding_value = float(data.get("holding_value", 0))
+        total_portfolio_value = float(data.get("total_portfolio_value", 0))
+        
+        if total_portfolio_value == 0:
+            percentage = 0.0
+        else:
+            percentage = (holding_value / total_portfolio_value) * 100
+        
+        return {
+            "percentage": round(percentage, 2),
+            "holding_value": round(holding_value, 2),
+            "total_portfolio_value": round(total_portfolio_value, 2),
+        }
+    
+    def _calc_diversification_score(self, data: Dict) -> Dict[str, Any]:
+        """Calculate diversification score based on holdings"""
+        holdings = data.get("holdings", [])
+        
+        if not holdings:
+            return {"score": 0}
+        
+        # Calculate total value
+        total_value = sum(h.get("value", 0) for h in holdings)
+        
+        if total_value == 0:
+            return {"score": 0}
+        
+        # Calculate Herfindahl index (concentration)
+        herfindahl = 0
+        for holding in holdings:
+            value = holding.get("value", 0)
+            weight = (value / total_value) if total_value > 0 else 0
+            herfindahl += weight * weight
+        
+        # Convert to diversification score (0-100)
+        # Lower herfindahl = better diversification = higher score
+        # Perfect diversification (equal weights): herfindahl = 1/n
+        # Single holding: herfindahl = 1
+        max_holdings = max(len(holdings), 1)
+        min_herfindahl = 1 / max_holdings if max_holdings > 0 else 0
+        max_herfindahl = 1
+        
+        if max_herfindahl - min_herfindahl != 0:
+            score = 100 * (1 - ((herfindahl - min_herfindahl) / (max_herfindahl - min_herfindahl)))
+        else:
+            score = 50
+        
+        return {
+            "score": round(max(0, min(100, score)), 2),
+            "herfindahl_index": round(herfindahl, 4),
+            "num_holdings": len(holdings),
         }
     
     def _calc_allocation_percentages(self, data: Dict) -> Dict[str, Any]:

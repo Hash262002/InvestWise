@@ -196,62 +196,76 @@ class BaseAgent(ABC):
     # Tool Execution
     # ----------------------------------------
     
-    async def _execute_tool(self, tool_name: str, tool_input: Any) -> str:
-        """Execute a tool and return observation string"""
+    async def _execute_tool(self, tool_name: str, tool_input: Any) -> Dict[str, Any]:
+        """Execute a tool and return observation dict"""
         
         if tool_name not in self.tool_map:
-            return f"Error: Tool '{tool_name}' not found. Available tools: {list(self.tool_map.keys())}"
+            return {
+                "error": True,
+                "message": f"Tool '{tool_name}' not found. Available tools: {list(self.tool_map.keys())}"
+            }
         
         tool = self.tool_map[tool_name]
         
         try:
-            # Validate parameters before execution
+            # Execute the tool
             if isinstance(tool_input, dict):
-                # Check for missing required parameters
-                if not tool.validate_params(tool_input):
-                    required = tool.parameters.get("required", [])
-                    missing = [p for p in required if p not in tool_input]
-                    
-                    logger.error(
-                        "tool_execution_error",
-                        tool=tool_name,
-                        error=f"Missing required parameters: {missing}"
-                    )
-                    return f"Error: Tool '{tool_name}' requires parameters: {required}. Missing: {missing}. Provided: {list(tool_input.keys())}"
-                
-                result = await tool.execute(**tool_input)
+                result = tool.execute(**tool_input)
             else:
-                result = await tool.execute(tool_input)
+                result = tool.execute(tool_input)
             
-            return result.to_observation()
-            
-        except TypeError as e:
-            # Handle missing positional arguments specifically
-            error_msg = str(e)
-            if "missing" in error_msg and "required positional argument" in error_msg:
-                required = tool.parameters.get("required", [])
-                logger.error(
-                    "tool_execution_error",
-                    tool=tool_name,
-                    error=error_msg,
-                    required_params=required
-                )
-                return f"Error: Tool '{tool_name}' requires all parameters: {required}. Make sure to include all required parameters in the action input."
-            
-            logger.error(
-                "tool_execution_error",
-                tool=tool_name,
-                error=error_msg
-            )
-            return f"Error executing {tool_name}: {error_msg}"
+            # Check if result is a ToolResult object
+            if hasattr(result, 'status'):
+                # It's a ToolResult
+                return {
+                    "error": result.status.value == "error",
+                    "observation": result.data if not result.error else result.error,
+                    "status": result.status.value
+                }
+            else:
+                # Fallback for dict returns
+                return result
             
         except Exception as e:
-            logger.error(
-                "tool_execution_error",
-                tool=tool_name,
-                error=str(e)
-            )
-            return f"Error executing {tool_name}: {str(e)}"
+            logger.error("tool_execution_error", tool=tool_name, error=str(e))
+            return {
+                "error": True,
+                "message": f"Error executing {tool_name}: {str(e)}"
+            }
+    
+    def _parse_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response to extract thought, action, and action input"""
+        import re
+        
+        result = {}
+        
+        # Extract Thought
+        thought_match = re.search(r"Thought:\s*(.+?)(?=Action:|Final Answer:|$)", response, re.DOTALL)
+        if thought_match:
+            result["thought"] = thought_match.group(1).strip()
+        
+        # Extract Final Answer
+        final_match = re.search(r"Final Answer:\s*(.+?)$", response, re.DOTALL)
+        if final_match:
+            result["final_answer"] = final_match.group(1).strip()
+            return result  # If we have a final answer, return early
+        
+        # Extract Action
+        action_match = re.search(r"Action:\s*(.+?)(?=Action Input:|$)", response, re.DOTALL)
+        if action_match:
+            result["action"] = action_match.group(1).strip()
+        
+        # Extract Action Input
+        action_input_match = re.search(r"Action Input:\s*(.+?)(?=Thought:|Observation:|Final Answer:|$)", response, re.DOTALL)
+        if action_input_match:
+            input_str = action_input_match.group(1).strip()
+            try:
+                import json
+                result["action_input"] = json.loads(input_str)
+            except:
+                result["action_input"] = input_str
+        
+        return result
     
     def _get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get schemas for all available tools"""

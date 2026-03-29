@@ -20,6 +20,14 @@ class ToolResult:
     status: ToolResultStatus
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert result to dictionary"""
+        return {
+            "status": self.status.value,
+            "data": self.data,
+            "error": self.error
+        }
 
 
 class BaseTool(ABC):
@@ -41,6 +49,10 @@ class BaseTool(ABC):
             "parameters": self._get_parameters_schema(),
         }
     
+    def to_schema(self) -> Dict[str, Any]:
+        """Alias for get_schema for compatibility"""
+        return self.get_schema()
+    
     def _get_parameters_schema(self) -> Dict[str, Any]:
         """Override to define parameter schema"""
         return {}
@@ -49,16 +61,16 @@ class BaseTool(ABC):
         """Validate parameters before execution. Returns error message if invalid."""
         return None
     
-    def safe_execute(self, **kwargs) -> Dict[str, Any]:
+    def safe_execute(self, **kwargs) -> ToolResult:
         """Execute with error handling"""
         try:
             # Validate parameters
             validation_error = self.validate_parameters(**kwargs)
             if validation_error:
-                return {
-                    "error": True,
-                    "message": validation_error,
-                }
+                return ToolResult(
+                    status=ToolResultStatus.ERROR,
+                    error=validation_error
+                )
             
             # Execute tool
             result = self.execute(**kwargs)
@@ -66,7 +78,7 @@ class BaseTool(ABC):
             
         except Exception as e:
             logger.error(f"Tool {self.name} execution error: {e}")
-            return {
-                "error": True,
-                "message": f"Tool execution failed: {str(e)}",
-            }
+            return ToolResult(
+                status=ToolResultStatus.ERROR,
+                error=f"Tool execution failed: {str(e)}"
+            )
