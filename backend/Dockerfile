@@ -4,6 +4,11 @@ FROM node:lts-slim
 # Set working directory
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (better caching)
 COPY package*.json ./
 RUN npm ci --only=production

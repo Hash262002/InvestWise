@@ -2,49 +2,54 @@ const express = require('express');
 const router = express.Router();
 
 const { authenticate, optionalAuth } = require('../middleware/auth');
-
-// Market data service placeholder
-// In production, integrate with Finnhub or similar API
+const { getQuote, searchSymbols, getMarketSummary, getChartData, formatQuote } = require('../services/yfinanceService');
+const logger = require('../utils/logger');
 
 /**
  * @route   GET /api/market/quote/:symbol
- * @desc    Get stock quote
+ * @desc    Get real-time stock quote from YFinance
  * @access  Public (with optional auth for rate limits)
  */
 router.get('/quote/:symbol', optionalAuth, async (req, res) => {
   try {
     const { symbol } = req.params;
+    const region = req.query.region || 'IN';
     
-    // TODO: Integrate with Finnhub API
-    // For now, return mock data
+    logger.info(`Fetching quote for symbol: ${symbol}, region: ${region}`);
+    
+    const quotes = await getQuote(symbol, region);
+    
+    if (!quotes || quotes.length === 0) {
+      return res.status(404).json({
+        error: 'Symbol Not Found',
+        message: `No data found for symbol: ${symbol}`,
+      });
+    }
+
+    const formattedQuotes = quotes.map(quote => formatQuote(quote));
+    
     res.json({
-      symbol: symbol.toUpperCase(),
-      price: 150.00,
-      change: 2.50,
-      changePercent: 1.69,
-      high: 152.00,
-      low: 148.50,
-      open: 149.00,
-      previousClose: 147.50,
-      volume: 1234567,
+      data: formattedQuotes[0],
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
+    logger.error('Error fetching quote:', error.message);
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to fetch quote',
+      message: error.message || 'Failed to fetch quote',
     });
   }
 });
 
 /**
  * @route   GET /api/market/search
- * @desc    Search for symbols
+ * @desc    Search for symbols using YFinance autocomplete
  * @access  Public
  */
 router.get('/search', async (req, res) => {
   try {
     const { q } = req.query;
+    const region = req.query.region || 'IN';
     
     if (!q || q.length < 1) {
       return res.status(400).json({
@@ -53,95 +58,146 @@ router.get('/search', async (req, res) => {
       });
     }
 
-    // TODO: Integrate with Finnhub symbol search
-    // For now, return mock data
+    logger.info(`Searching symbols for query: ${q}, region: ${region}`);
+    
+    const results = await searchSymbols(q, region);
+    
+    const formattedResults = results.map(result => ({
+      symbol: result.symbol,
+      name: result.name,
+      type: result.typeDisp || result.type,
+      exchange: result.exchDisp || result.exch,
+    }));
+
     res.json({
-      results: [
-        { symbol: 'AAPL', name: 'Apple Inc', type: 'stock', exchange: 'NASDAQ' },
-        { symbol: 'GOOGL', name: 'Alphabet Inc', type: 'stock', exchange: 'NASDAQ' },
-      ],
-      count: 2,
+      results: formattedResults,
+      count: formattedResults.length,
+      query: q,
+      timestamp: new Date().toISOString(),
     });
   } catch (error) {
+    logger.error('Error searching symbols:', error.message);
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to search symbols',
+      message: error.message || 'Failed to search symbols',
     });
   }
 });
 
 /**
  * @route   GET /api/market/indices
- * @desc    Get major market indices
+ * @desc    Get major market indices (real-time data)
  * @access  Public
  */
 router.get('/indices', async (req, res) => {
   try {
-    // TODO: Integrate with real market data
-    // Mock Indian market indices
+    const region = req.query.region || 'IN';
+    
+    logger.info(`Fetching indices for region: ${region}`);
+    
+    // Get Indian market indices
+    const indicesSymbols = ['^NSEI', '^BSESN', '^NSEBANK'];
+    const indicesQuotes = await getQuote(indicesSymbols, region);
+    
+    if (!indicesQuotes || indicesQuotes.length === 0) {
+      // Fallback to mock data if API fails
+      return res.json({
+        indices: [
+          {
+            symbol: '^NSEI',
+            name: 'NIFTY 50',
+            value: 22450.50,
+            change: 125.30,
+            changePercent: 0.56,
+          },
+          {
+            symbol: '^BSESN',
+            name: 'SENSEX',
+            value: 73850.25,
+            change: 410.75,
+            changePercent: 0.56,
+          },
+          {
+            symbol: '^NSEBANK',
+            name: 'NIFTY Bank',
+            value: 48250.00,
+            change: -85.50,
+            changePercent: -0.18,
+          },
+        ],
+        timestamp: new Date().toISOString(),
+        source: 'mock',
+      });
+    }
+
+    const indices = indicesQuotes.map(quote => ({
+      symbol: quote.symbol,
+      name: quote.longName || quote.shortName || quote.symbol,
+      value: quote.regularMarketPrice,
+      change: quote.regularMarketChange,
+      changePercent: quote.regularMarketChangePercent,
+      exchange: quote.fullExchangeName || quote.exchange,
+      currency: quote.currency,
+    }));
+
     res.json({
-      indices: [
-        {
-          symbol: '^NSEI',
-          name: 'NIFTY 50',
-          value: 22450.50,
-          change: 125.30,
-          changePercent: 0.56,
-        },
-        {
-          symbol: '^BSESN',
-          name: 'SENSEX',
-          value: 73850.25,
-          change: 410.75,
-          changePercent: 0.56,
-        },
-        {
-          symbol: '^NSEBANK',
-          name: 'NIFTY Bank',
-          value: 48250.00,
-          change: -85.50,
-          changePercent: -0.18,
-        },
-      ],
+      indices,
       timestamp: new Date().toISOString(),
+      source: 'yfinance',
     });
   } catch (error) {
+    logger.error('Error fetching indices:', error.message);
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to fetch indices',
+      message: error.message || 'Failed to fetch indices',
     });
   }
 });
 
 /**
- * @route   GET /api/market/trending
- * @desc    Get trending stocks
+ * @route   GET /api/market/chart/:symbol
+ * @desc    Get historical chart data
  * @access  Public
  */
-router.get('/trending', async (req, res) => {
+router.get('/chart/:symbol', async (req, res) => {
   try {
-    const region = req.query.region || 'IN';
+    const { symbol } = req.params;
+    const { interval = '1d', range = '1y' } = req.query;
     
-    // TODO: Integrate with real trending data
+    logger.info(`Fetching chart data for symbol: ${symbol}, interval: ${interval}, range: ${range}`);
+    
+    const chartData = await getChartData(symbol, interval, range);
+    
+    if (!chartData) {
+      return res.status(404).json({
+        error: 'Symbol Not Found',
+        message: `No chart data found for symbol: ${symbol}`,
+      });
+    }
+
+    const timestamps = chartData.timestamp || [];
+    const prices = chartData.indicators?.quote?.[0] || {};
+    
     res.json({
-      region,
-      gainers: [
-        { symbol: 'TATASTEEL.NS', name: 'Tata Steel', change: 3.5 },
-        { symbol: 'RELIANCE.NS', name: 'Reliance Industries', change: 2.8 },
-      ],
-      losers: [
-        { symbol: 'HDFCBANK.NS', name: 'HDFC Bank', change: -1.2 },
-        { symbol: 'TCS.NS', name: 'TCS', change: -0.8 },
-      ],
-      mostActive: [
-        { symbol: 'SBIN.NS', name: 'State Bank of India', volume: 5000000 },
-      ],
+      symbol: chartData.meta?.symbol || symbol,
+      currency: chartData.meta?.currency,
+      regularMarketPrice: chartData.meta?.regularMarketPrice,
+      previousClose: chartData.meta?.previousClose,
+      timestamps,
+      prices: {
+        opens: prices.open || [],
+        closes: prices.close || [],
+        highs: prices.high || [],
+        lows: prices.low || [],
+        volumes: prices.volume || [],
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
+    logger.error('Error fetching chart data:', error.message);
     res.status(500).json({
       error: 'Internal Server Error',
-      message: 'Failed to fetch trending stocks',
+      message: error.message || 'Failed to fetch chart data',
     });
   }
 });
