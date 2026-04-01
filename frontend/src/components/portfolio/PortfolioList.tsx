@@ -1,6 +1,7 @@
 import { Portfolio } from '@/types/portfolio'
 import { PortfolioCard } from './PortfolioCard'
 import { usePortfolioStore } from '@/stores/portfolioStore'
+import { useUIStore } from '@/stores/uiStore'
 
 interface PortfolioListProps {
   isLoading?: boolean
@@ -8,6 +9,7 @@ interface PortfolioListProps {
 
 export const PortfolioList = ({ isLoading = false }: PortfolioListProps) => {
   const { portfolios } = usePortfolioStore()
+  const { toggleCreatePortfolioModal } = useUIStore()
 
   if (isLoading) {
     return (
@@ -25,7 +27,7 @@ export const PortfolioList = ({ isLoading = false }: PortfolioListProps) => {
         <div className="text-gray-500 space-y-3">
           <p className="text-lg font-medium">No portfolios yet</p>
           <p className="text-sm">Create your first portfolio to get started</p>
-          <button className="btn btn-primary mt-4">
+          <button onClick={() => toggleCreatePortfolioModal()} className="btn btn-primary mt-4">
             Create Portfolio
           </button>
         </div>

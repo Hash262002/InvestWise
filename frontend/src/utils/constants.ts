@@ -1,9 +1,9 @@
 // Constants
 export const PORTFOLIO_TYPES = [
-  { value: 'long-term', label: 'Long-term Investment' },
-  { value: 'short-term', label: 'Short-term Trading' },
-  { value: 'balanced', label: 'Balanced' },
+  { value: 'retirement', label: 'Retirement' },
   { value: 'growth', label: 'Growth' },
+  { value: 'income', label: 'Income' },
+  { value: 'trading', label: 'Trading' },
   { value: 'other', label: 'Other' },
 ]
 

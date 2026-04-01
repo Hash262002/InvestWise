@@ -1,11 +1,15 @@
 import httpx
 import json
 import logging
+import asyncio
 from typing import Optional, Dict, Any, AsyncGenerator
 
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+# Global semaphore to limit concurrent Ollama requests (serialize to avoid overload)
+_ollama_semaphore = asyncio.Semaphore(1)
 
 
 class OllamaClient:
@@ -52,19 +56,21 @@ class OllamaClient:
         if stop:
             payload["options"]["stop"] = stop
         
-        try:
-            response = await self._client.post("/api/generate", json=payload)
-            response.raise_for_status()
-            
-            result = response.json()
-            return result.get("response", "")
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Ollama HTTP error: {e.response.status_code} - {e.response.text}")
-            raise
-        except httpx.RequestError as e:
-            logger.error(f"Ollama request error: {e}")
-            raise
+        # Use semaphore to limit concurrent requests (Ollama can only handle ~2 at a time)
+        async with _ollama_semaphore:
+            try:
+                response = await self._client.post("/api/generate", json=payload)
+                response.raise_for_status()
+                
+                result = response.json()
+                return result.get("response", "")
+                
+            except httpx.HTTPStatusError as e:
+                logger.error(f"Ollama HTTP error: {e.response.status_code} - {e.response.text}")
+                raise
+            except httpx.RequestError as e:
+                logger.error(f"Ollama request error: {type(e).__name__}: {e}")
+                raise
     
     async def generate_stream(
         self,
@@ -185,14 +191,32 @@ Begin!
             # Parse the response into structured format
             return self._parse_tool_response(response)
             
-        except Exception as e:
-            logger.error(f"Error in generate_with_tools: {e}")
+        except httpx.ReadTimeout as e:
+            logger.error(f"Ollama read timeout - model may be overloaded: {type(e).__name__}")
             return {
                 "thought": "Error occurred",
                 "action": None,
                 "action_input": None,
                 "final_answer": None,
-                "error": str(e)
+                "error": f"Timeout: Ollama overloaded with parallel requests"
+            }
+        except httpx.RequestError as e:
+            logger.error(f"Ollama request error in generate_with_tools: {type(e).__name__}: {e}")
+            return {
+                "thought": "Error occurred",
+                "action": None,
+                "action_input": None,
+                "final_answer": None,
+                "error": f"{type(e).__name__}: {str(e) or 'Connection issue'}"
+            }
+        except Exception as e:
+            logger.error(f"Error in generate_with_tools: {type(e).__name__}: {e}")
+            return {
+                "thought": "Error occurred",
+                "action": None,
+                "action_input": None,
+                "final_answer": None,
+                "error": f"{type(e).__name__}: {str(e)}"
             }
     
     def _format_tools(self, tools: list) -> str:

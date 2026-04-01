@@ -4,6 +4,7 @@ import asyncio
 
 from .analyst_agent import AnalystAgent
 from .risk_agent import RiskAgent
+from .web_search_agent import WebSearchAgent
 from .base_agent import AgentResult
 from ..llm import get_ollama_client
 from ..models import (
@@ -27,6 +28,7 @@ class Orchestrator:
     def __init__(self):
         self.analyst = AnalystAgent()
         self.risk_assessor = RiskAgent()
+        self.web_search = WebSearchAgent()
         self.llm = get_ollama_client()
     
     async def analyze_portfolio(self, portfolio: Dict[str, Any]) -> AnalysisOutput:
@@ -42,13 +44,15 @@ class Orchestrator:
         """
         
         logger.info(f"Starting portfolio analysis: {portfolio.get('name', 'Unknown')}")
+        print("🤖 Starting portfolio analysis...")
         
-        # Run analyst and risk agents in parallel
+        # Run all 3 agents in parallel
         analyst_task = self.analyst.analyze_portfolio(portfolio)
         risk_task = self.risk_assessor.assess_risk(portfolio)
+        web_search_task = self.web_search.analyze_portfolio_holdings(portfolio.get("holdings", []))
         
-        analyst_result, risk_result = await asyncio.gather(
-            analyst_task, risk_task, return_exceptions=True
+        analyst_result, risk_result, holdings_analysis = await asyncio.gather(
+            analyst_task, risk_task, web_search_task, return_exceptions=True
         )
         
         # Handle errors - convert AgentResult to dict if successful, otherwise use empty dict
@@ -74,8 +78,12 @@ class Orchestrator:
         # Extract risk assessment
         risk_assessment = self._build_risk_assessment(risk_data, portfolio)
         
-        # Generate holdings analysis
-        holdings_analysis = await self._analyze_holdings(portfolio)
+        # Handle web search results (already have holdings_analysis from parallel execution)
+        if isinstance(holdings_analysis, Exception):
+            logger.error(f"Web search agent error: {holdings_analysis}")
+            holdings_analysis = await self._analyze_holdings(portfolio)  # Fallback
+        elif not holdings_analysis:
+            holdings_analysis = await self._analyze_holdings(portfolio)  # Fallback if empty
         
         # Generate recommendations
         recommendations = await self._generate_recommendations(

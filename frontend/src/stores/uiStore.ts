@@ -22,7 +22,7 @@ interface UIState {
   closeModal: (name: keyof UIState['modals']) => void
   toggleModal: (name: keyof UIState['modals']) => void
   
-  // Convenience methods for specific modals
+  // Convenience getters for specific modals
   isCreatePortfolioModalOpen: boolean
   toggleCreatePortfolioModal: () => void
   isEditPortfolioModalOpen: boolean
@@ -74,33 +74,45 @@ export const useUIStore = create<UIState>((set, get) => ({
     }))
   },
 
-  // Convenience properties/methods
-  get isCreatePortfolioModalOpen() {
-    return get().modals.createPortfolio
-  },
+  // Convenience getters for specific modals
+  isCreatePortfolioModalOpen: false,
   toggleCreatePortfolioModal: () => {
-    get().toggleModal('createPortfolio')
+    set((state) => ({
+      modals: {
+        ...state.modals,
+        createPortfolio: !state.modals.createPortfolio,
+      },
+    }))
   },
 
-  get isEditPortfolioModalOpen() {
-    return get().modals.editPortfolio
-  },
+  isEditPortfolioModalOpen: false,
   toggleEditPortfolioModal: () => {
-    get().toggleModal('editPortfolio')
+    set((state) => ({
+      modals: {
+        ...state.modals,
+        editPortfolio: !state.modals.editPortfolio,
+      },
+    }))
   },
 
-  get isDeletePortfolioModalOpen() {
-    return get().modals.deletePortfolio
-  },
+  isDeletePortfolioModalOpen: false,
   toggleDeletePortfolioModal: () => {
-    get().toggleModal('deletePortfolio')
+    set((state) => ({
+      modals: {
+        ...state.modals,
+        deletePortfolio: !state.modals.deletePortfolio,
+      },
+    }))
   },
 
-  get isAddHoldingModalOpen() {
-    return get().modals.addHolding
-  },
+  isAddHoldingModalOpen: false,
   toggleAddHoldingModal: () => {
-    get().toggleModal('addHolding')
+    set((state) => ({
+      modals: {
+        ...state.modals,
+        addHolding: !state.modals.addHolding,
+      },
+    }))
   },
 
   addToast: (toast: Omit<Toast, 'id'>) => {

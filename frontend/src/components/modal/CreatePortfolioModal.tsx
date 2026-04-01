@@ -5,12 +5,13 @@ import { validatePortfolioName } from '@/utils/validators'
 import { PORTFOLIO_TYPES } from '@/utils/constants'
 
 export const CreatePortfolioModal = () => {
-  const { isCreatePortfolioModalOpen, toggleCreatePortfolioModal } = useUIStore()
+  const isCreatePortfolioModalOpen = useUIStore((state) => state.modals.createPortfolio)
+  const toggleCreatePortfolioModal = useUIStore((state) => state.toggleCreatePortfolioModal)
   const { createPortfolio, loading } = usePortfolio()
 
   const [formData, setFormData] = useState({
     name: '',
-    type: 'long-term',
+    type: 'other',
     description: '',
   })
   const [errors, setErrors] = useState<{ name?: string }>({})
@@ -30,7 +31,7 @@ export const CreatePortfolioModal = () => {
 
     try {
       await createPortfolio(formData)
-      setFormData({ name: '', type: 'long-term', description: '' })
+      setFormData({ name: '', type: 'other', description: '' })
       toggleCreatePortfolioModal()
     } catch (error) {
       console.error('Failed to create portfolio:', error)

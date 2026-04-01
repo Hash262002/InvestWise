@@ -32,8 +32,6 @@ class ResultProducer:
             value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
             key_serializer=lambda k: k.encode("utf-8") if k else None,
             acks="all",  # Wait for all replicas
-            retries=3,
-            retry_backoff_ms=1000,
             compression_type="gzip",
         )
         

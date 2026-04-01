@@ -33,7 +33,7 @@ const sendAnalysisRequest = async (portfolioId, userId, portfolio) => {
           quantity: h.quantity,
           averageCost: h.averageCost,
           totalCost: h.totalCost,
-          currentValue: h.currentValue,
+          isActiuve: h.isActive
         })),
     },
     requestedAt: new Date().toISOString(),

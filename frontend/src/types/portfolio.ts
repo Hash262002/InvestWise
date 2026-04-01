@@ -14,9 +14,10 @@ export interface Holding {
   assetType?: string
   isActive?: boolean
   analysis?: {
-    sentiment?: string
-    recommendation?: string
-    analysisText?: string
+    sentiment?: string | null
+    recommendation?: string | null
+    summary?: string
+    analyzedAt?: string
   }
 }
 
@@ -26,7 +27,7 @@ export interface Portfolio {
   user?: string
   name: string
   description?: string
-  type?: 'long-term' | 'short-term' | 'trading' | 'other'
+  type?: 'long-term' | 'short-term' | 'trading' | 'income' | 'growth' | 'other'
   currency: string
   totalInvested: number
   currentValue: number
@@ -35,11 +36,32 @@ export interface Portfolio {
   isActive?: boolean
   createdAt?: string
   analytics?: {
-    analysisStatus?: string
+    analysisStatus?: string | null
     analysisRequestId?: string
     lastAnalyzedAt?: string
     processingTime?: number
-    lastAnalysis?: any
+    lastAnalysis?: {
+      summary?: string
+      metrics?: {
+        totalReturn?: number
+        annualizedReturn?: number | null
+        volatility?: number | null
+        sharpeRatio?: number | null
+        maxDrawdown?: number | null
+      }
+      riskAssessment?: {
+        riskLevel?: string
+        diversificationScore?: number
+        sectorConcentration?: Record<string, number>
+        warnings?: string[]
+      }
+      recommendations?: Array<{
+        type?: string
+        priority?: string
+        description?: string
+        symbol?: string
+      }>
+    }
   }
 }
 

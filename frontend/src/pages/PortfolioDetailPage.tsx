@@ -1,14 +1,20 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { usePortfolio } from '@/hooks/usePortfolio'
+import { useUIStore } from '@/stores/uiStore'
 import { HoldingsTable } from '@/components/portfolio/HoldingsTable'
 import { PortfolioStats } from '@/components/portfolio/PortfolioStats'
+import { CreatePortfolioModal } from '@/components/modal/CreatePortfolioModal'
+import { ImportCSVModal } from '@/components/modal/ImportCSVModal'
+import { AnalysisModal } from '@/components/modal/AnalysisModal'
 import { formatDate, formatCurrency, formatPercentage, getReturnColor } from '@/utils/formatters'
 import { calculatePortfolioMetrics } from '@/utils/helpers'
 
 export const PortfolioDetailPage = () => {
+  const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false)
   const { id } = useParams<{ id: string }>()
+  const toggleAddHoldingModal = useUIStore((state) => state.toggleAddHoldingModal)
   const navigate = useNavigate()
   const { selectedPortfolio, fetchPortfolioById, loading } = usePortfolio()
 
@@ -46,9 +52,17 @@ export const PortfolioDetailPage = () => {
             <h1 className="text-3xl font-bold text-gray-900">{selectedPortfolio.name}</h1>
             <p className="text-gray-600 mt-2 capitalize">{selectedPortfolio.type}</p>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Last Updated</p>
-            <p className="text-gray-900 font-semibold">{selectedPortfolio.createdAt ? formatDate(selectedPortfolio.createdAt) : 'N/A'}</p>
+          <div className="flex flex-col gap-3 items-end">
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Last Updated</p>
+              <p className="text-gray-900 font-semibold">{selectedPortfolio.createdAt ? formatDate(selectedPortfolio.createdAt) : 'N/A'}</p>
+            </div>
+            <button
+              onClick={() => setIsAnalysisModalOpen(true)}
+              className="btn btn-primary text-sm"
+            >
+              📊 Analyse Portfolio
+            </button>
           </div>
         </div>
 
@@ -65,10 +79,23 @@ export const PortfolioDetailPage = () => {
 
         {/* Holdings Section */}
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-gray-900">Holdings</h2>
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold text-gray-900">Holdings</h2>
+            <button
+              onClick={() => toggleAddHoldingModal()}
+              className="btn btn-primary text-sm"
+            >
+              + Import Holdings
+            </button>
+      {id && <AnalysisModal portfolioId={id} isOpen={isAnalysisModalOpen} onClose={() => setIsAnalysisModalOpen(false)} />}
+          </div>
           <HoldingsTable holdings={selectedPortfolio.holdings} />
         </div>
       </div>
+
+      {/* Modals */}
+      <CreatePortfolioModal />
+      {id && <ImportCSVModal portfolioId={id} onSuccess={() => fetchPortfolioById(id)} />}
     </Layout>
   )
 }

@@ -17,14 +17,14 @@ class Settings(BaseSettings):
     
     # Ollama LLM Configuration
     ollama_base_url: str = "http://host.docker.internal:11434"
-    ollama_model: str = "llama3.1:8b"
-    ollama_timeout: int = 120
+    ollama_model: str = "qwen2.5:14b"
+    ollama_timeout: int = 180
     
     # Optional: Serper API for web search
-    serper_api_key: str = ""
+    serper_api_key: str = "95c10436304622fd09aaf7d2a4263f3eeac56a6b"
     
     # Logging
-    log_level: str = "INFO"
+    log_level: str = "INFO" 
     
     # Uppercase aliases as properties for backward compatibility
     @property
