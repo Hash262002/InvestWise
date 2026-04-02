@@ -155,9 +155,9 @@ Based on your findings, provide:
         result = await self.run(task, context)
         
         # Parse result and create HoldingAnalysis
-        analysis = await self._parse_web_analysis(result, symbol, name)
+        # analysis = await self._parse_web_analysis(result, symbol, name)
         
-        return analysis
+        return result
     
     async def analyze_portfolio_holdings(self, holdings: List[Dict[str, Any]]) -> List[HoldingAnalysis]:
         """
@@ -219,7 +219,7 @@ Based on your findings, provide:
         Returns:
             Structured HoldingAnalysis
         """
-        
+        print("The agent result is : ", agent_result)
         # Extract analysis from agent metadata
         analysis_text = getattr(agent_result, "result", {}).get("final_answer", "")
         if not analysis_text:

@@ -52,7 +52,7 @@ class Orchestrator:
         web_search_task = self.web_search.analyze_portfolio_holdings(portfolio.get("holdings", []))
         
         analyst_result, risk_result, holdings_analysis = await asyncio.gather(
-            analyst_task, risk_task, web_search_task, return_exceptions=True
+            web_search_task, analyst_task, risk_task, return_exceptions=True
         )
         
         # Handle errors - convert AgentResult to dict if successful, otherwise use empty dict
@@ -83,6 +83,7 @@ class Orchestrator:
             logger.error(f"Web search agent error: {holdings_analysis}")
             holdings_analysis = await self._analyze_holdings(portfolio)  # Fallback
         elif not holdings_analysis:
+            print("Web search agent result : ", holdings_analysis)
             holdings_analysis = await self._analyze_holdings(portfolio)  # Fallback if empty
         
         # Generate recommendations

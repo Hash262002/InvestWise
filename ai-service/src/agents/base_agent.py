@@ -208,11 +208,18 @@ class BaseAgent(ABC):
         tool = self.tool_map[tool_name]
         
         try:
-            # Execute the tool
-            if isinstance(tool_input, dict):
-                result = tool.execute(**tool_input)
+            # Execute the tool - prefer async version if available
+            if hasattr(tool, 'execute_async'):
+                if isinstance(tool_input, dict):
+                    result = await tool.execute_async(**tool_input)
+                else:
+                    result = await tool.execute_async(tool_input)
             else:
-                result = tool.execute(tool_input)
+                # Fall back to sync execute
+                if isinstance(tool_input, dict):
+                    result = tool.execute(**tool_input)
+                else:
+                    result = tool.execute(tool_input)
             
             # Check if result is a ToolResult object
             if hasattr(result, 'status'):
