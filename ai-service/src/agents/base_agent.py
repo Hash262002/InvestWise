@@ -122,6 +122,11 @@ class BaseAgent(ABC):
             for iteration in range(self.max_iterations):
                 step = AgentStep(step_number=iteration + 1)
                 
+                # Force final answer on last iteration
+                is_last_iteration = (iteration == self.max_iterations - 1)
+                if is_last_iteration:
+                    conversation_history += "\n\nIMPORTANT: This is your FINAL iteration. You MUST provide a Final Answer NOW based on all information gathered so far. Do NOT request another action."
+                
                 # Get LLM response with tools
                 response = await self.llm.generate_with_tools(
                     prompt=conversation_history,
@@ -133,8 +138,11 @@ class BaseAgent(ABC):
                 # Extract thought
                 step.thought = response.get("thought")
                 
-                # Check if we have a final answer
-                if response.get("final_answer"):
+                # Check if we have a final answer (only if no action is requested)
+                # If both action and final_answer are present, the LLM hallucinated
+                # the answer - execute the action first instead
+                has_action = bool(response.get("action"))
+                if response.get("final_answer") and not has_action:
                     step.is_final = True
                     step.final_answer = response["final_answer"]
                     self.steps.append(step)
@@ -173,13 +181,26 @@ class BaseAgent(ABC):
                 
                 self.steps.append(step)
             
-            # Max iterations reached
-            self.state = AgentState.ERROR
+            # Max iterations reached - synthesize best-effort answer from observations
+            self.state = AgentState.COMPLETED
+            logger.warning(
+                "agent_max_iterations",
+                agent=self.name,
+                iterations=self.max_iterations
+            )
+            
+            # Collect all observations for synthesis
+            observations = [s.observation for s in self.steps if s.observation]
+            last_thought = self.steps[-1].thought if self.steps else ""
+            
+            # Create a synthesized answer from available data
+            synthesized_answer = f"Analysis based on available data:\n{last_thought}\n\nObservations gathered:\n" + "\n".join(str(obs) for obs in observations[:3])
+            
             return AgentResult(
-                success=False,
-                answer="",
+                success=True,
+                answer=synthesized_answer[:1000],  # Truncate if too long
                 steps=self.steps,
-                error=f"Max iterations ({self.max_iterations}) reached without final answer"
+                metadata={"iterations": self.max_iterations, "synthesized": True}
             )
             
         except Exception as e:

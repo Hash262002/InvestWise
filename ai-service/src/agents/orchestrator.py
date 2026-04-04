@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Optional
 import logging
 import asyncio
 
@@ -52,7 +52,7 @@ class Orchestrator:
         web_search_task = self.web_search.analyze_portfolio_holdings(portfolio.get("holdings", []))
         
         analyst_result, risk_result, holdings_analysis = await asyncio.gather(
-            web_search_task, analyst_task, risk_task, return_exceptions=True
+            analyst_task, risk_task, web_search_task, return_exceptions=True
         )
         
         # Handle errors - convert AgentResult to dict if successful, otherwise use empty dict
@@ -85,17 +85,28 @@ class Orchestrator:
         elif not holdings_analysis:
             print("Web search agent result : ", holdings_analysis)
             holdings_analysis = await self._analyze_holdings(portfolio)  # Fallback if empty
+        else:
+            # Convert AgentResult objects to HoldingAnalysis objects
+            normalized_holdings = []
+            for item in holdings_analysis:
+                if isinstance(item, HoldingAnalysis):
+                    normalized_holdings.append(item)
+                elif isinstance(item, AgentResult):
+                    holding_data = self._parse_agent_result_to_holding(item)
+                    if holding_data:
+                        normalized_holdings.append(holding_data)
+            holdings_analysis = normalized_holdings if normalized_holdings else await self._analyze_holdings(portfolio)
         
         # Generate recommendations
         recommendations = await self._generate_recommendations(
             portfolio, metrics, risk_assessment, holdings_analysis
         )
-        
+        print("The recommendations are : ", recommendations)
         # Generate executive summary
         summary = await self._generate_summary(
             portfolio, metrics, risk_assessment, recommendations
         )
-        
+        print("The summary is : ", summary)
         logger.info(f"Portfolio analysis completed: {portfolio.get('name', 'Unknown')}")
         
         return AnalysisOutput(
@@ -291,6 +302,58 @@ Format: [Analysis text] | Sentiment: [sentiment] | Recommendation: [recommendati
                 recommendation=Recommendation.HOLD,
             )
     
+    def _parse_agent_result_to_holding(self, agent_result: AgentResult) -> Optional[HoldingAnalysis]:
+        """Parse AgentResult text answer into HoldingAnalysis object"""
+        import re
+        
+        if not agent_result.success or not agent_result.answer:
+            return None
+        
+        answer = agent_result.answer
+        
+        # Extract symbol
+        symbol_match = re.search(r'Symbol:\s*\[?([A-Z0-9]+)\]?', answer, re.IGNORECASE)
+        symbol = symbol_match.group(1) if symbol_match else "UNKNOWN"
+        
+        # Extract recommendation
+        recommendation = Recommendation.HOLD  # Default
+        rec_match = re.search(r'Recommendation:\s*\[?([A-Z_\s]+)\]?', answer, re.IGNORECASE)
+        if rec_match:
+            rec_text = rec_match.group(1).strip().upper().replace(" ", "_")
+            if "STRONG_BUY" in rec_text:
+                recommendation = Recommendation.STRONG_BUY
+            elif "STRONG_SELL" in rec_text:
+                recommendation = Recommendation.STRONG_SELL
+            elif "BUY" in rec_text:
+                recommendation = Recommendation.BUY
+            elif "SELL" in rec_text:
+                recommendation = Recommendation.SELL
+            else:
+                recommendation = Recommendation.HOLD
+        
+        # Extract sentiment
+        sentiment = Sentiment.NEUTRAL  # Default
+        sent_match = re.search(r'(?:Overall\s+)?Sentiment:\s*\[?([A-Z]+)\]?', answer, re.IGNORECASE)
+        if sent_match:
+            sent_text = sent_match.group(1).strip().upper()
+            if "BULLISH" in sent_text:
+                sentiment = Sentiment.BULLISH
+            elif "BEARISH" in sent_text:
+                sentiment = Sentiment.BEARISH
+            else:
+                sentiment = Sentiment.NEUTRAL
+        
+        # Use the full answer as analysis text (truncated)
+        analysis = answer[:500] if len(answer) > 500 else answer
+        
+        return HoldingAnalysis(
+            symbol=symbol,
+            name=symbol,  # Use symbol as name since we don't have it in the response
+            analysis=analysis,
+            sentiment=sentiment,
+            recommendation=recommendation,
+        )
+    
     async def _generate_recommendations(
         self,
         portfolio: Dict,
@@ -325,9 +388,19 @@ Format: [Analysis text] | Sentiment: [sentiment] | Recommendation: [recommendati
                     description=f"Reduce exposure to {sector} sector (currently {pct}%).",
                 ))
         
-        # Holdings-based recommendations
-        sells = [h for h in holdings_analysis if h.recommendation in [Recommendation.SELL, Recommendation.STRONG_SELL]]
-        buys = [h for h in holdings_analysis if h.recommendation in [Recommendation.BUY, Recommendation.STRONG_BUY]]
+        # Holdings-based recommendations - handle both HoldingAnalysis and AgentResult
+        normalized_holdings = []
+        for item in holdings_analysis:
+            if isinstance(item, HoldingAnalysis):
+                normalized_holdings.append(item)
+            elif isinstance(item, AgentResult):
+                # Parse recommendation from AgentResult.answer text
+                holding_data = self._parse_agent_result_to_holding(item)
+                if holding_data:
+                    normalized_holdings.append(holding_data)
+        
+        sells = [h for h in normalized_holdings if h.recommendation in [Recommendation.SELL, Recommendation.STRONG_SELL]]
+        buys = [h for h in normalized_holdings if h.recommendation in [Recommendation.BUY, Recommendation.STRONG_BUY]]
         
         for holding in sells[:3]:  # Limit to top 3
             recommendations.append(PortfolioRecommendation(
